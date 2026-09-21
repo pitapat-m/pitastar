@@ -1,0 +1,19 @@
+[
+  { "name": "시리우스 (Sirius)", "ra": [6, 45], "dec": [-16, 42], "mag": -1.46, "spectral": "A" },
+  { "name": "카노푸스 (Canopus)", "ra": [6, 23], "dec": [-52, 41], "mag": -0.74, "spectral": "F" },
+  { "name": "알파 센타우리 (Rigil Kentaurus)", "ra": [14, 39], "dec": [-60, 50], "mag": -0.27, "spectral": "G" },
+  { "name": "아크투루스 (Arcturus)", "ra": [14, 15], "dec": [19, 10], "mag": -0.05, "spectral": "K" },
+  { "name": "베가 (Vega)", "ra": [18, 36], "dec": [38, 47], "mag": 0.03, "spectral": "A" },
+  { "name": "카펠라 (Capella)", "ra": [5, 16], "dec": [45, 59], "mag": 0.08, "spectral": "G" },
+  { "name": "리겔 (Rigel)", "ra": [5, 14], "dec": [-8, 12], "mag": 0.13, "spectral": "B" },
+  { "name": "프로키온 (Procyon)", "ra": [7, 39], "dec": [5, 13], "mag": 0.34, "spectral": "F" },
+  { "name": "베텔게우스 (Betelgeuse)", "ra": [5, 55], "dec": [7, 24], "mag": 0.50, "spectral": "M" },
+  { "name": "알타이르 (Altair)", "ra": [19, 50], "dec": [8, 52], "mag": 0.77, "spectral": "A" },
+  { "name": "알데바란 (Aldebaran)", "ra": [4, 35], "dec": [16, 30], "mag": 0.85, "spectral": "K" },
+  { "name": "안타레스 (Antares)", "ra": [16, 29], "dec": [-26, 25], "mag": 1.06, "spectral": "M" },
+  { "name": "스피카 (Spica)", "ra": [13, 25], "dec": [-11, 9], "mag": 0.98, "spectral": "B" },
+  { "name": "폴룩스 (Pollux)", "ra": [7, 45], "dec": [28, 1], "mag": 1.14, "spectral": "K" },
+  { "name": "데네브 (Deneb)", "ra": [20, 41], "dec": [45, 16], "mag": 1.25, "spectral": "A" },
+  { "name": "레굴루스 (Regulus)", "ra": [10, 8], "dec": [11, 58], "mag": 1.36, "spectral": "B" },
+  { "name": "북극성 (Polaris)", "ra": [2, 31], "dec": [89, 15], "mag": 1.97, "spectral": "F" }
+]

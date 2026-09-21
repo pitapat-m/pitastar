@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 관측자 천구 - 실제 DSO 이미지 적용</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        #info {
+            position: absolute; top: 15px; left: 15px; color: white;
+            pointer-events: none; background: rgba(0,0,0,0.85);
+            padding: 12px 18px; border-radius: 8px; line-height: 1.6; font-size: 13px;
+            border: 1px solid #444;
+        }
+        #status {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #ff5555; background: rgba(0,0,0,0.9); padding: 20px;
+            border-radius: 10px; border: 1px solid #ff5555; text-align: center;
+            display: none; font-size: 15px; line-height: 1.5;
+        }
+        #tooltip {
+            position: absolute; color: #fff; background: rgba(0,0,0,0.9);
+            padding: 8px 12px; border-radius: 6px; font-size: 12px;
+            pointer-events: none; display: none; border: 1px solid #777; line-height: 1.4;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <div id="info">
+        <b>🌌 3D 관측자 천구 (실제 DSO 이미지)</b><br>
+        • 🌀 은하/성운/성단 실제 우주 사진 맵핑 지원<br>
+        • 🔍 확대 감도 절반 축소 (부드러운 줌 지원)<br>
+        • 마우스 드래그: 360도 둘러보기 / 휠: 확대·축소
+    </div>
+    <div id="status"></div>
+    <div id="tooltip"></div>
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 3000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        camera.position.set(0, 0, 0.1);
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableZoom = true;
+        controls.minDistance = 0.01;
+        controls.maxDistance = 0.2;
+        controls.enablePan = false;
+        controls.rotateSpeed = -0.5;
+
+        window.addEventListener('wheel', event => {
+            const zoomSpeed = 0.025;
+            if (event.deltaY < 0) camera.fov = Math.max(5, camera.fov - zoomSpeed * 100);
+            else camera.fov = Math.min(100, camera.fov + zoomSpeed * 100);
+            camera.updateProjectionMatrix();
+        });
+
+        const CELESTIAL_RADIUS = 800;
+        const SPECTRAL_COLORS = { O: 0x9bb0ff, B: 0xaabfff, A: 0xcad7ff, F: 0xf8f7ff, G: 0xfff4ea, K: 0xffd2a1, M: 0xffcc6f };
+        const textureLoader = new THREE.TextureLoader();
+        const STAR_TEXTURE_URL = "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/lava/lavatile.jpg";
+        const DEFAULT_DSO_TEXTURE = "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/sprites/spark1.png";
+        const starTexture = textureLoader.load(STAR_TEXTURE_URL);
+        const interactiveObjects = [];
+
+        function raDecToVector3(raArray, decArray, radius) {
+            if (!raArray || !decArray) return new THREE.Vector3(0, 0, 0);
+            const raRad = (raArray[0] + raArray[1] / 60) * 15 * (Math.PI / 180);
+            const decRad = (decArray[0] >= 0 ? 1 : -1) * (Math.abs(decArray[0]) + decArray[1] / 60) * (Math.PI / 180);
+            return new THREE.Vector3(radius * Math.cos(decRad) * Math.cos(raRad), radius * Math.sin(decRad), radius * Math.cos(decRad) * Math.sin(raRad));
+        }
+
+        const PLANETS_DATA = [
+            { name: "태양 (Sun)", ra: [0, 0], dec: [0, 0], radiusKm: 696340, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/lava/lavatile.jpg" },
+            { name: "목성 (Jupiter)", ra: [3, 10], dec: [16, 30], radiusKm: 69911, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/jupiter_1k.jpg" },
+            { name: "토성 (Saturn)", ra: [6, 10], dec: [18, 0], radiusKm: 58232, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/saturn_1k.jpg" },
+            { name: "천왕성 (Uranus)", ra: [3, 30], dec: [17, 30], radiusKm: 25362, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/uranus_1k.jpg" },
+            { name: "해왕성 (Neptune)", ra: [23, 50], dec: [-2, 20], radiusKm: 24622, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/neptune_1k.jpg" },
+            { name: "금성 (Venus)", ra: [4, 0], dec: [20, 0], radiusKm: 6051, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/venus_1k.jpg" },
+            { name: "화성 (Mars)", ra: [5, 20], dec: [24, 10], radiusKm: 3389, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/mars_1k.jpg" },
+            { name: "수성 (Mercury)", ra: [1, 50], dec: [8, 0], radiusKm: 2439, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/mercury_1k.jpg" },
+            { name: "달 (Moon)", ra: [2, 30], dec: [15, 0], radiusKm: 1737, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/moon_1k.jpg" }
+        ];
+
+        const EARTH_RADIUS_KM = 6371;
+        const BASE_SCALE = 1.5;
+        PLANETS_DATA.forEach(planet => {
+            const scaledRadius = planet.name.includes("태양") ? 22.5 : Math.max(1.6, (planet.radiusKm / EARTH_RADIUS_KM) * BASE_SCALE);
+            const material = new THREE.MeshBasicMaterial({ map: textureLoader.load(planet.texture), side: THREE.DoubleSide });
+            const mesh = new THREE.Mesh(new THREE.SphereGeometry(scaledRadius, 32, 32), material);
+            mesh.position.copy(raDecToVector3(planet.ra, planet.dec, CELESTIAL_RADIUS));
+            mesh.rotation.y = Math.PI / 2;
+            mesh.userData = { category: "태양계 천체", name: planet.name, radius: `${planet.radiusKm.toLocaleString()} km`, ra: `${planet.ra[0]}h ${planet.ra[1]}m`, dec: `${planet.dec[0]}° ${planet.dec[1]}'` };
+            scene.add(mesh);
+            interactiveObjects.push(mesh);
+        });
+
+        async function loadDatabases() {
+            const statusDiv = document.getElementById('status');
+            try {
+                const starsResponse = await fetch('./stars.json');
+                if (!starsResponse.ok) throw new Error('stars.json 로드 실패');
+                const starsData = await starsResponse.json();
+                starsData.forEach(star => {
+                    const mesh = new THREE.Mesh(new THREE.SphereGeometry(Math.max(3.6, (5 - star.mag) * 3.0) / 2, 16, 16), new THREE.MeshBasicMaterial({ map: starTexture, color: SPECTRAL_COLORS[star.spectral] || 0xffffff, side: THREE.DoubleSide }));
+                    mesh.position.copy(raDecToVector3(star.ra, star.dec, CELESTIAL_RADIUS));
+                    mesh.userData = { category: "항성 (Star)", name: star.name, mag: `${star.mag} 등급`, spectral: `${star.spectral}형`, ra: `${star.ra[0]}h ${star.ra[1]}m`, dec: `${star.dec[0]}° ${star.dec[1]}'` };
+                    scene.add(mesh);
+                    interactiveObjects.push(mesh);
+                });
+            } catch (error) {
+                console.error('stars.json 오류:', error);
+                statusDiv.style.display = 'block';
+                statusDiv.innerHTML = `⚠️ <b>stars.json</b>을 불러오지 못했습니다.<br>F12 콘솔창을 확인하세요.`;
+            }
+
+            try {
+                const dsoResponse = await fetch('./dso.json');
+                if (!dsoResponse.ok) throw new Error('dso.json 로드 실패');
+                const dsoData = await dsoResponse.json();
+                dsoData.forEach(dso => {
+                    const texture = textureLoader.load(dso.image || DEFAULT_DSO_TEXTURE);
+                    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+                        map: texture,
+                        color: dso.image ? 0xffffff : 0x55ffaa,
+                        transparent: true
+                    }));
+                    sprite.position.copy(raDecToVector3(dso.ra, dso.dec, CELESTIAL_RADIUS));
+                    const spriteSize = dso.image ? 32 : 18;
+                    sprite.scale.set(spriteSize, spriteSize, 1);
+                    sprite.userData = { category: `딥스카이 (${dso.type})`, name: dso.name, mag: `${dso.mag} 등급`, ra: `${dso.ra[0]}h ${dso.ra[1]}m`, dec: `${dso.dec[0]}° ${dso.dec[1]}'` };
+                    scene.add(sprite);
+                    interactiveObjects.push(sprite);
+                });
+            } catch (error) {
+                console.error('dso.json 오류:', error);
+            }
+        }
+        loadDatabases();
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const tooltip = document.getElementById('tooltip');
+        window.addEventListener('mousemove', event => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const hit = raycaster.intersectObjects(interactiveObjects)[0];
+            if (!hit) { tooltip.style.display = 'none'; return; }
+            const data = hit.object.userData;
+            tooltip.style.display = 'block';
+            tooltip.style.left = `${event.clientX + 12}px`;
+            tooltip.style.top = `${event.clientY + 12}px`;
+            tooltip.innerHTML = data.category === "태양계 천체" ? `<b>${data.name}</b> (${data.category})<br>• 반지름: ${data.radius}<br>• 좌표: ${data.ra} / ${data.dec}` : `<b>${data.name}</b> (${data.category})<br>• 밝기: ${data.mag}<br>• 좌표: ${data.ra} / ${data.dec}`;
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
