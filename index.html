@@ -10,68 +10,164 @@
             position: absolute; top: 15px; left: 15px; color: white;
             pointer-events: none; background: rgba(0,0,0,0.85);
             padding: 12px 18px; border-radius: 8px; line-height: 1.6; font-size: 13px;
-            border: 1px solid #444;
-        }
-        #status {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #ff5555; background: rgba(0,0,0,0.9); padding: 20px;
-            border-radius: 10px; border: 1px solid #ff5555; text-align: center;
-            display: none; font-size: 15px; line-height: 1.5;
+            border: 1px solid #444; z-index: 100;
         }
         #tooltip {
             position: absolute; color: #fff; background: rgba(0,0,0,0.9);
             padding: 8px 12px; border-radius: 6px; font-size: 12px;
-            pointer-events: none; display: none; border: 1px solid #777; line-height: 1.4;
+            pointer-events: none; display: none; border: 1px solid #777; line-height: 1.4; z-index: 100;
         }
+        #search-container {
+            position: absolute; top: 15px; right: 15px; z-index: 200;
+            display: flex; flex-direction: column; align-items: flex-end;
+        }
+        #search-toggle-btn {
+            width: 42px; height: 42px; border-radius: 50%;
+            background: rgba(20, 20, 25, 0.85); color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.3); font-size: 18px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); backdrop-filter: blur(5px);
+        }
+        #search-toggle-btn:hover { background: rgba(40, 40, 50, 0.95); border-color: #77aaff; }
+        #search-box {
+            display: none; margin-top: 10px; width: 280px;
+            background: rgba(15, 15, 20, 0.9); border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 10px; padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+        }
+        #search-input {
+            width: 100%; box-sizing: border-box; padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px; color: #fff; font-size: 14px; outline: none;
+        }
+        #search-input:focus { border-color: #66a0ff; }
+        #search-input::placeholder { color: #aaa; }
+        #search-results { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow-y: auto; }
+        #search-results li {
+            padding: 8px 12px; color: #eee; font-size: 13px; cursor: pointer;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        #search-results li:hover { background: rgba(100, 150, 255, 0.25); }
+        #search-results .type-tag { font-size: 10px; opacity: 0.6; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.15); }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
     <div id="info">
-        <b>🌌 3D 관측자 천구 (실제 DSO 이미지)</b><br>
-        • 🌀 은하/성운/성단 실제 우주 사진 맵핑 지원<br>
-        • 🔍 확대 감도 절반 축소 (부드러운 줌 지원)<br>
-        • 마우스 드래그: 360도 둘러보기 / 휠: 확대·축소
+        <b>🌌 3D 관측자 천구 (자연색 광학 모드)</b><br>
+        • 🪐 태양계 행성 + 🌟 주요 항성 + 🌀 딥스카이(자연 관측 색상)<br>
+        • 🌀 주요 DSO 실제 우주 사진 맵핑, 나머지는 자연색 글로우 표시<br>
+        • 🔍 부드러운 줌 지원 (감도 축소)<br>
+        • 마우스 드래그: 둘러보기 / 휠: 확대·축소
     </div>
-    <div id="status"></div>
+    
     <div id="tooltip"></div>
+    <div id="search-container">
+        <button id="search-toggle-btn" type="button" title="천체 검색">🔍</button>
+        <div id="search-box">
+            <input type="text" id="search-input" placeholder="천체 이름/기호 검색 (예: M31, 화성...)" autocomplete="off">
+            <ul id="search-results"></ul>
+        </div>
+    </div>
+
     <script>
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 3000);
+        
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
+
         camera.position.set(0, 0, 0.1);
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        
         controls.enableZoom = true;
         controls.minDistance = 0.01;
         controls.maxDistance = 0.2;
         controls.enablePan = false;
         controls.rotateSpeed = -0.5;
 
-        window.addEventListener('wheel', event => {
-            const zoomSpeed = 0.025;
-            if (event.deltaY < 0) camera.fov = Math.max(5, camera.fov - zoomSpeed * 100);
-            else camera.fov = Math.min(100, camera.fov + zoomSpeed * 100);
+        // 줌 감도 설정
+        window.addEventListener('wheel', (event) => {
+            const zoomSpeed = 0.025; 
+            if (event.deltaY < 0) {
+                camera.fov = Math.max(5, camera.fov - zoomSpeed * 100);
+            } else {
+                camera.fov = Math.min(100, camera.fov + zoomSpeed * 100);
+            }
             camera.updateProjectionMatrix();
         });
 
         const CELESTIAL_RADIUS = 800;
         const SPECTRAL_COLORS = { O: 0x9bb0ff, B: 0xaabfff, A: 0xcad7ff, F: 0xf8f7ff, G: 0xfff4ea, K: 0xffd2a1, M: 0xffcc6f };
         const textureLoader = new THREE.TextureLoader();
-        const STAR_TEXTURE_URL = "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/lava/lavatile.jpg";
-        const DEFAULT_DSO_TEXTURE = "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/sprites/spark1.png";
-        const starTexture = textureLoader.load(STAR_TEXTURE_URL);
-        const interactiveObjects = [];
 
-        function raDecToVector3(raArray, decArray, radius) {
-            if (!raArray || !decArray) return new THREE.Vector3(0, 0, 0);
-            const raRad = (raArray[0] + raArray[1] / 60) * 15 * (Math.PI / 180);
-            const decRad = (decArray[0] >= 0 ? 1 : -1) * (Math.abs(decArray[0]) + decArray[1] / 60) * (Math.PI / 180);
-            return new THREE.Vector3(radius * Math.cos(decRad) * Math.cos(raRad), radius * Math.sin(decRad), radius * Math.cos(decRad) * Math.sin(raRad));
+        const STAR_TEXTURE_URL = "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/lava/lavatile.jpg";
+        const starTexture = textureLoader.load(STAR_TEXTURE_URL);
+
+        function createNaturalGlowTexture(centerColor, outerColor) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const context = canvas.getContext('2d');
+            const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+            gradient.addColorStop(0, centerColor);
+            gradient.addColorStop(0.35, outerColor);
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 128, 128);
+            return new THREE.CanvasTexture(canvas);
         }
 
+        const DSO_IMAGE_URLS = {
+            'M1 (게 성운 / Crab Nebula)': 'https://upload.wikimedia.org/wikipedia/commons/0/00/Crab_Nebula.jpg',
+            'M8 (석굴 성운 / Lagoon Nebula)': 'https://upload.wikimedia.org/wikipedia/commons/8/87/Lagoon_Nebula_%28eso1533a%29.jpg',
+            'M13 (허큘리스 대구상성단)': 'https://upload.wikimedia.org/wikipedia/commons/1/1b/Messier_13_HST.jpg',
+            'M16 (독수리 성운 / Eagle Nebula)': 'https://upload.wikimedia.org/wikipedia/commons/2/2b/Eagle_Nebula_from_ESO.jpg',
+            'M27 (아령 성운 / Dumbbell Nebula)': 'https://upload.wikimedia.org/wikipedia/commons/6/68/M27_-_Dumbbell_Nebula.jpg',
+            'M31 (안드로메다 은하)': 'https://upload.wikimedia.org/wikipedia/commons/c/c2/M31_09-01-2011.jpg',
+            'M33 (삼각형자리 은하)': 'https://upload.wikimedia.org/wikipedia/commons/0/08/M33_-_Triangulum_Galaxy.jpg',
+            'M42 (오리온 대성운)': 'https://upload.wikimedia.org/wikipedia/commons/f/f3/Orion_Nebula_-_Hubble_2006_mosaic_large.jpg',
+            'M45 (플레이아데스 성단 / 일곱고누)': 'https://upload.wikimedia.org/wikipedia/commons/4/4e/Pleiades_large.jpg',
+            'M51 (소용돌이 은하 / Whirlpool Galaxy)': 'https://upload.wikimedia.org/wikipedia/commons/d/db/Messier51_sRGB.jpg',
+            'M57 (고리 성운 / Ring Nebula)': 'https://upload.wikimedia.org/wikipedia/commons/1/13/M57_The_Ring_Nebula.jpg',
+            'M104 (솜브레로 은하 / Sombrero Galaxy)': 'https://upload.wikimedia.org/wikipedia/commons/5/5e/M104_ngc4594_sombrero_galaxy_hi-res.jpg'
+        };
+
+        const DSO_NATURAL_COLORS = {
+            'M1 (게 성운 / Crab Nebula)': ['rgba(230,240,255,0.9)', 'rgba(100,160,200,0.5)'],
+            'M8 (석굴 성운 / Lagoon Nebula)': ['rgba(255,220,220,0.9)', 'rgba(180,80,100,0.5)'],
+            'M13 (허큘리스 대구상성단)': ['rgba(255,250,230,0.95)', 'rgba(200,210,230,0.4)'],
+            'M16 (독수리 성운 / Eagle Nebula)': ['rgba(240,210,190,0.9)', 'rgba(160,90,80,0.5)'],
+            'M27 (아령 성운 / Dumbbell Nebula)': ['rgba(180,255,240,0.9)', 'rgba(40,180,160,0.5)'],
+            'M31 (안드로메다 은하)': ['rgba(255,245,210,0.95)', 'rgba(170,195,230,0.45)'],
+            'M33 (삼각형자리 은하)': ['rgba(250,240,220,0.9)', 'rgba(160,185,220,0.4)'],
+            'M42 (오리온 대성운)': ['rgba(220,245,255,0.95)', 'rgba(150,110,160,0.5)'],
+            'M45 (플레이아데스 성단)': ['rgba(230,240,255,0.95)', 'rgba(120,170,240,0.5)'],
+            'M51 (소용돌이 은하)': ['rgba(255,240,200,0.9)', 'rgba(160,180,220,0.45)'],
+            'M57 (고리 성운)': ['rgba(160,255,230,0.9)', 'rgba(30,160,150,0.5)'],
+            'M104 (솜브레로 은하)': ['rgba(255,248,220,0.95)', 'rgba(190,180,160,0.4)']
+        };
+
+        function raDecToVector3(raArray, decArray, r) {
+            if (!raArray || !decArray) return new THREE.Vector3(0, 0, 0);
+            const raDeg = (raArray[0] + raArray[1] / 60) * 15;
+            const raRad = raDeg * (Math.PI / 180);
+            const decDeg = (decArray[0] >= 0 ? 1 : -1) * (Math.abs(decArray[0]) + decArray[1] / 60);
+            const decRad = decDeg * (Math.PI / 180);
+
+            return new THREE.Vector3(
+                r * Math.cos(decRad) * Math.cos(raRad),
+                r * Math.sin(decRad),
+                r * Math.cos(decRad) * Math.sin(raRad)
+            );
+        }
+
+        const interactiveObjects = [];
+
+        // 1. 태양계 행성
         const PLANETS_DATA = [
             { name: "태양 (Sun)", ra: [0, 0], dec: [0, 0], radiusKm: 696340, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/lava/lavatile.jpg" },
             { name: "목성 (Jupiter)", ra: [3, 10], dec: [16, 30], radiusKm: 69911, texture: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/jupiter_1k.jpg" },
@@ -86,82 +182,179 @@
 
         const EARTH_RADIUS_KM = 6371;
         const BASE_SCALE = 1.5;
+
         PLANETS_DATA.forEach(planet => {
-            const scaledRadius = planet.name.includes("태양") ? 22.5 : Math.max(1.6, (planet.radiusKm / EARTH_RADIUS_KM) * BASE_SCALE);
-            const material = new THREE.MeshBasicMaterial({ map: textureLoader.load(planet.texture), side: THREE.DoubleSide });
-            const mesh = new THREE.Mesh(new THREE.SphereGeometry(scaledRadius, 32, 32), material);
-            mesh.position.copy(raDecToVector3(planet.ra, planet.dec, CELESTIAL_RADIUS));
+            const pos = raDecToVector3(planet.ra, planet.dec, CELESTIAL_RADIUS);
+            let scaledRadius = (planet.radiusKm / EARTH_RADIUS_KM) * BASE_SCALE;
+            if (scaledRadius < 1.6) scaledRadius = 1.6;
+            if (planet.name.includes("태양")) scaledRadius = 22.5;
+
+            const geometry = new THREE.SphereGeometry(scaledRadius, 32, 32);
+            const textureMap = textureLoader.load(planet.texture);
+            const material = new THREE.MeshBasicMaterial({ map: textureMap, side: THREE.DoubleSide });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.copy(pos);
             mesh.rotation.y = Math.PI / 2;
-            mesh.userData = { category: "태양계 천체", name: planet.name, radius: `${planet.radiusKm.toLocaleString()} km`, ra: `${planet.ra[0]}h ${planet.ra[1]}m`, dec: `${planet.dec[0]}° ${planet.dec[1]}'` };
+
+            mesh.userData = {
+                category: "태양계 천체",
+                name: planet.name,
+                radius: `${planet.radiusKm.toLocaleString()} km`,
+                ra: `${planet.ra[0]}h ${planet.ra[1]}m`,
+                dec: `${planet.dec[0]}° ${planet.dec[1]}'}`
+            };
+
             scene.add(mesh);
             interactiveObjects.push(mesh);
         });
 
+        // 2. 외부 데이터 로드
         async function loadDatabases() {
-            const statusDiv = document.getElementById('status');
+            // 항성 로드
             try {
                 const starsResponse = await fetch('./stars.json');
-                if (!starsResponse.ok) throw new Error('stars.json 로드 실패');
-                const starsData = await starsResponse.json();
-                starsData.forEach(star => {
-                    const mesh = new THREE.Mesh(new THREE.SphereGeometry(Math.max(3.6, (5 - star.mag) * 3.0) / 2, 16, 16), new THREE.MeshBasicMaterial({ map: starTexture, color: SPECTRAL_COLORS[star.spectral] || 0xffffff, side: THREE.DoubleSide }));
-                    mesh.position.copy(raDecToVector3(star.ra, star.dec, CELESTIAL_RADIUS));
-                    mesh.userData = { category: "항성 (Star)", name: star.name, mag: `${star.mag} 등급`, spectral: `${star.spectral}형`, ra: `${star.ra[0]}h ${star.ra[1]}m`, dec: `${star.dec[0]}° ${star.dec[1]}'` };
-                    scene.add(mesh);
-                    interactiveObjects.push(mesh);
-                });
-            } catch (error) {
-                console.error('stars.json 오류:', error);
-                statusDiv.style.display = 'block';
-                statusDiv.innerHTML = `⚠️ <b>stars.json</b>을 불러오지 못했습니다.<br>F12 콘솔창을 확인하세요.`;
-            }
+                if (starsResponse.ok) {
+                    const starsData = await starsResponse.json();
+                    starsData.forEach(star => {
+                        const pos = raDecToVector3(star.ra, star.dec, CELESTIAL_RADIUS);
+                        const starSize = Math.max(3.6, (5 - star.mag) * 3.0);
+                        const colorHex = SPECTRAL_COLORS[star.spectral] || 0xffffff;
 
+                        const geometry = new THREE.SphereGeometry(starSize / 2, 16, 16);
+                        const material = new THREE.MeshBasicMaterial({ map: starTexture, color: colorHex, side: THREE.DoubleSide });
+                        
+                        const mesh = new THREE.Mesh(geometry, material);
+                        mesh.position.copy(pos);
+                        mesh.userData = { category: "항성 (Star)", name: star.name, mag: `${star.mag} 등급`, spectral: `${star.spectral}형`, ra: `${star.ra[0]}h ${star.ra[1]}m`, dec: `${star.dec[0]}° ${star.dec[1]}'}` };
+
+                        scene.add(mesh);
+                        interactiveObjects.push(mesh);
+                    });
+                }
+            } catch (e) { console.error("stars.json 로드 실패:", e); }
+
+            // DSO 로드
             try {
                 const dsoResponse = await fetch('./dso.json');
-                if (!dsoResponse.ok) throw new Error('dso.json 로드 실패');
-                const dsoData = await dsoResponse.json();
-                dsoData.forEach(dso => {
-                    const texture = textureLoader.load(dso.image || DEFAULT_DSO_TEXTURE);
-                    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-                        map: texture,
-                        color: dso.image ? 0xffffff : 0x55ffaa,
-                        transparent: true
-                    }));
-                    sprite.position.copy(raDecToVector3(dso.ra, dso.dec, CELESTIAL_RADIUS));
-                    const spriteSize = dso.image ? 32 : 18;
-                    sprite.scale.set(spriteSize, spriteSize, 1);
-                    sprite.userData = { category: `딥스카이 (${dso.type})`, name: dso.name, mag: `${dso.mag} 등급`, ra: `${dso.ra[0]}h ${dso.ra[1]}m`, dec: `${dso.dec[0]}° ${dso.dec[1]}'` };
-                    scene.add(sprite);
-                    interactiveObjects.push(sprite);
-                });
-            } catch (error) {
-                console.error('dso.json 오류:', error);
-            }
+                if (dsoResponse.ok) {
+                    const dsoData = await dsoResponse.json();
+
+                    dsoData.forEach(dso => {
+                        const pos = raDecToVector3(dso.ra, dso.dec, CELESTIAL_RADIUS);
+                        
+                        const imageUrl = dso.image || DSO_IMAGE_URLS[dso.name];
+                        const naturalColors = DSO_NATURAL_COLORS[dso.name];
+                        const centerColor = naturalColors ? naturalColors[0] : dso.type.includes('은하') ? 'rgba(255,230,190,0.9)' : dso.type.includes('성단') ? 'rgba(240,245,255,0.9)' : 'rgba(190,255,240,0.9)';
+                        const outerColor = naturalColors ? naturalColors[1] : dso.type.includes('은하') ? 'rgba(150,180,220,0.45)' : dso.type.includes('성단') ? 'rgba(140,180,240,0.45)' : 'rgba(70,180,170,0.5)';
+                        const naturalTexture = createNaturalGlowTexture(centerColor, outerColor);
+                        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: naturalTexture, transparent: true }));
+                        sprite.position.copy(pos);
+                        sprite.scale.set(imageUrl ? 32 : 18, imageUrl ? 32 : 18, 1);
+                        sprite.userData = { category: `딥스카이 (${dso.type})`, name: dso.name, mag: `${dso.mag} 등급`, ra: `${dso.ra[0]}h ${dso.ra[1]}m`, dec: `${dso.dec[0]}° ${dso.dec[1]}'` };
+                        scene.add(sprite);
+                        interactiveObjects.push(sprite);
+
+                        if (imageUrl) {
+                            textureLoader.load(imageUrl, loadedTexture => {
+                                sprite.material.map = loadedTexture;
+                                sprite.material.needsUpdate = true;
+                            }, undefined, () => console.warn(`기본 글로우 모드로 유지: ${dso.name}`));
+                        }
+                    });
+                }
+            } catch (e) { console.error("dso.json 로드 실패:", e); }
         }
+
         loadDatabases();
 
+        // 3. 마우스 툴팁
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
         const tooltip = document.getElementById('tooltip');
-        window.addEventListener('mousemove', event => {
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
             raycaster.setFromCamera(mouse, camera);
-            const hit = raycaster.intersectObjects(interactiveObjects)[0];
-            if (!hit) { tooltip.style.display = 'none'; return; }
-            const data = hit.object.userData;
-            tooltip.style.display = 'block';
-            tooltip.style.left = `${event.clientX + 12}px`;
-            tooltip.style.top = `${event.clientY + 12}px`;
-            tooltip.innerHTML = data.category === "태양계 천체" ? `<b>${data.name}</b> (${data.category})<br>• 반지름: ${data.radius}<br>• 좌표: ${data.ra} / ${data.dec}` : `<b>${data.name}</b> (${data.category})<br>• 밝기: ${data.mag}<br>• 좌표: ${data.ra} / ${data.dec}`;
+            const intersects = raycaster.intersectObjects(interactiveObjects);
+
+            if (intersects.length > 0) {
+                const data = intersects[0].object.userData;
+                tooltip.style.display = 'block';
+                tooltip.style.left = e.clientX + 12 + 'px';
+                tooltip.style.top = e.clientY + 12 + 'px';
+
+                if (data.category === "태양계 천체") {
+                    tooltip.innerHTML = `<b>${data.name}</b> (${data.category})<br>• 반지름: ${data.radius}<br>• 좌표: ${data.ra} / ${data.dec}`;
+                } else {
+                    tooltip.innerHTML = `<b>${data.name}</b> (${data.category})<br>• 밝기: ${data.mag}<br>• 좌표: ${data.ra} / ${data.dec}`;
+                }
+            } else {
+                tooltip.style.display = 'none';
+            }
+        });
+
+        const searchToggleButton = document.getElementById('search-toggle-btn');
+        const searchBox = document.getElementById('search-box');
+        const searchInput = document.getElementById('search-input');
+        const searchResults = document.getElementById('search-results');
+        let targetCameraPosition = null;
+
+        searchToggleButton.addEventListener('click', () => {
+            const isOpen = searchBox.style.display === 'block';
+            searchBox.style.display = isOpen ? 'none' : 'block';
+            searchToggleButton.textContent = isOpen ? '🔍' : '✖';
+            searchToggleButton.title = isOpen ? '천체 검색' : '닫기';
+            if (isOpen) {
+                searchInput.value = '';
+                searchResults.replaceChildren();
+            } else {
+                searchInput.focus();
+            }
+        });
+
+        function focusOnObject(object) {
+            targetCameraPosition = object.position.clone().normalize().negate().multiplyScalar(0.1);
+        }
+
+        searchInput.addEventListener('input', event => {
+            const query = event.target.value.trim().toLowerCase();
+            searchResults.replaceChildren();
+            if (!query) return;
+
+            interactiveObjects
+                .filter(object => object.userData.name.toLowerCase().includes(query))
+                .slice(0, 30)
+                .forEach(object => {
+                    const result = document.createElement('li');
+                    const name = document.createElement('span');
+                    const type = document.createElement('span');
+                    name.textContent = object.userData.name;
+                    type.textContent = object.userData.category.split(' ')[0];
+                    type.className = 'type-tag';
+                    result.append(name, type);
+                    result.addEventListener('click', () => focusOnObject(object));
+                    searchResults.appendChild(result);
+                });
+        });
+
+        searchInput.addEventListener('keydown', event => {
+            if (event.key === 'Enter') searchResults.querySelector('li')?.click();
         });
 
         function animate() {
             requestAnimationFrame(animate);
+            if (targetCameraPosition) {
+                camera.position.lerp(targetCameraPosition, 0.08);
+                if (camera.position.distanceTo(targetCameraPosition) < 0.001) targetCameraPosition = null;
+            }
             controls.update();
             renderer.render(scene, camera);
         }
         animate();
+
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
